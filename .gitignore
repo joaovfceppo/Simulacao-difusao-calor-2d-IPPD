@@ -1,0 +1,13 @@
+# Binários compilados
+*.o
+*.out
+src/simulacao
+src/*.exe
+
+# Saídas geradas pela simulação (não versionar resultados de execução)
+data/saida/*
+!data/saida/.gitkeep
+
+# Arquivos de sistema
+.DS_Store
+*.swp
