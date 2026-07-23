@@ -51,6 +51,22 @@ direita). Também é possível definir regiões retangulares internas com
 temperatura fixa, representando fontes de calor (ou de resfriamento, se a
 temperatura for negativa).
 
+## Disco não-compartilhado entre os nós MPI
+
+O ambiente de execução (Xivoco) fornece múltiplos nós de cluster que não
+compartilham disco entre si. O programa contorna essa limitação nas duas
+pontas:
+
+- **Entrada**: apenas o processo de rank 0 lê o arquivo de configuração do
+  seu próprio disco; os demais processos recebem essa configuração via
+  `MPI_Bcast`, sem precisar que o arquivo exista em todos os nós.
+- **Saída**: a cada intervalo de passos configurado, todos os processos
+  enviam sua fatia calculada para o rank 0 via `MPI_Gather`, que monta a
+  grade completa em memória e escreve um único arquivo de saída.
+
+Na prática, isso significa que o arquivo de entrada e a pasta de saída só
+precisam existir no nó onde o rank 0 é executado (tipicamente o `master`).
+
 ## Estrutura do repositório
 
 ```
@@ -58,8 +74,8 @@ projeto/
 ├── src/            # código-fonte em C (MPI + OpenMP)
 ├── data/
 │   ├── entrada/    # arquivos de configuração da simulação
-│   └── saida/      # arquivos gerados pela simulação (por processo/passo)
-├── scripts/        # scripts auxiliares (ex: juntar as saídas dos processos)
+│   └── saida/      # arquivos gerados pela simulação (grade completa, por passo salvo)
+├── scripts/        # scripts auxiliares (ex: visualização dos resultados)
 └── docs/           # relatório, resultados, análise de desempenho
 ```
 
@@ -74,9 +90,10 @@ Compilar:
 mpicc -fopenmp src/difusao_calor.c -o src/difusao_calor -lm
 ```
 
+Executar:
 ```bash
-OMP_NUM_THREADS=2 mpirun -np 4 --host master,worker-1,worker-2,worker-3 ./src/difusao_calor data/entrada/entrada.txt
+OMP_NUM_THREADS=2 mpirun -np 4 --host master,worker-1,worker-2,worker-3 \
+    ./src/difusao_calor data/entrada/entrada.txt data/saida
 ```
 
-
-Integrantes: João Vitor Fonseca Ceppo
+Integrantes: João Vitor Fonseca Ceppo e Henrique Colares Versiani

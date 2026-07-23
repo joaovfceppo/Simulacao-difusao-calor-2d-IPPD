@@ -14,7 +14,7 @@ typedef struct {
     double alpha;
     double dx, dy, dt;
     int n_passos;
-    int intervalo_salvamento; /* usado em um commit futuro, ao escrever saída */
+    int intervalo_salvamento;
 
     double temp_topo, temp_base, temp_esquerda, temp_direita;
     double temp_inicial;
@@ -22,6 +22,14 @@ typedef struct {
     int n_fontes;
     FonteCalor *fontes;
 } Configuracao;
+
+typedef struct {
+    int n_linhas, n_colunas;
+    double alpha, dx, dy, dt;
+    int n_passos, intervalo_salvamento;
+    double temp_topo, temp_base, temp_esquerda, temp_direita, temp_inicial;
+    int n_fontes;
+} ConfiguracaoEscalar;
 
 int proxima_linha_util(FILE *arquivo, char *buf, size_t tamanho) {
     while (fgets(buf, (int)tamanho, arquivo) != NULL) {
@@ -89,6 +97,53 @@ int le_configuracao(const char *caminho, Configuracao *cfg) {
     return 0;
 }
 
+void distribui_configuracao(Configuracao *cfg, int rank) {
+    ConfiguracaoEscalar base;
+
+    if (rank == 0) {
+        base.n_linhas = cfg->n_linhas;
+        base.n_colunas = cfg->n_colunas;
+        base.alpha = cfg->alpha;
+        base.dx = cfg->dx;
+        base.dy = cfg->dy;
+        base.dt = cfg->dt;
+        base.n_passos = cfg->n_passos;
+        base.intervalo_salvamento = cfg->intervalo_salvamento;
+        base.temp_topo = cfg->temp_topo;
+        base.temp_base = cfg->temp_base;
+        base.temp_esquerda = cfg->temp_esquerda;
+        base.temp_direita = cfg->temp_direita;
+        base.temp_inicial = cfg->temp_inicial;
+        base.n_fontes = cfg->n_fontes;
+    }
+
+    MPI_Bcast(&base, sizeof(ConfiguracaoEscalar), MPI_BYTE, 0, MPI_COMM_WORLD);
+
+    if (rank != 0) {
+        cfg->n_linhas = base.n_linhas;
+        cfg->n_colunas = base.n_colunas;
+        cfg->alpha = base.alpha;
+        cfg->dx = base.dx;
+        cfg->dy = base.dy;
+        cfg->dt = base.dt;
+        cfg->n_passos = base.n_passos;
+        cfg->intervalo_salvamento = base.intervalo_salvamento;
+        cfg->temp_topo = base.temp_topo;
+        cfg->temp_base = base.temp_base;
+        cfg->temp_esquerda = base.temp_esquerda;
+        cfg->temp_direita = base.temp_direita;
+        cfg->temp_inicial = base.temp_inicial;
+        cfg->n_fontes = base.n_fontes;
+
+        cfg->fontes = malloc(sizeof(FonteCalor) * (size_t)(cfg->n_fontes > 0 ? cfg->n_fontes : 1));
+    }
+
+    if (cfg->n_fontes > 0) {
+        MPI_Bcast(cfg->fontes, (int)(sizeof(FonteCalor) * (size_t)cfg->n_fontes),
+                  MPI_BYTE, 0, MPI_COMM_WORLD);
+    }
+}
+
 int verifica_estabilidade(const Configuracao *cfg) {
     double r = cfg->alpha * cfg->dt * (1.0 / (cfg->dx * cfg->dx) + 1.0 / (cfg->dy * cfg->dy));
     return r <= 0.5;
@@ -105,7 +160,6 @@ int ponto_em_fonte(const Configuracao *cfg, int linha_global, int coluna, double
     }
     return 0;
 }
-
 
 int obtem_temp_borda(const Configuracao *cfg, int linha_global, int coluna, double *temp) {
     if (linha_global == 0) { *temp = cfg->temp_topo; return 1; }
@@ -129,6 +183,33 @@ void libera_grade(double **grade) {
     free(grade);
 }
 
+void escreve_saida_global(const Configuracao *cfg, const double *grade_completa,
+                           int passo, const char *dir_saida) {
+    char caminho[512];
+    snprintf(caminho, sizeof(caminho), "%s/saida_passo%06d.txt", dir_saida, passo);
+
+    FILE *arquivo = fopen(caminho, "w");
+    if (arquivo == NULL) {
+        fprintf(stderr,
+            "Aviso: nao foi possivel escrever '%s'. O diretorio de saida existe?\n",
+            caminho);
+        return;
+    }
+
+    fprintf(arquivo, "# n_linhas=%d n_colunas=%d passo=%d\n",
+            cfg->n_linhas, cfg->n_colunas, passo);
+
+    for (int i = 0; i < cfg->n_linhas; i++) {
+        for (int j = 0; j < cfg->n_colunas; j++) {
+            fprintf(arquivo, "%.4f", grade_completa[i * cfg->n_colunas + j]);
+            if (j < cfg->n_colunas - 1) fprintf(arquivo, " ");
+        }
+        fprintf(arquivo, "\n");
+    }
+
+    fclose(arquivo);
+}
+
 int main(int argc, char **argv) {
     int rank, n_processos;
 
@@ -138,21 +219,33 @@ int main(int argc, char **argv) {
 
     if (argc < 2) {
         if (rank == 0) {
-            fprintf(stderr, "Uso: %s <caminho_arquivo_entrada>\n", argv[0]);
-            fprintf(stderr, "Exemplo: %s data/entrada/entrada.txt\n", argv[0]);
+            fprintf(stderr, "Uso: %s <arquivo_entrada> [diretorio_saida]\n", argv[0]);
+            fprintf(stderr, "Exemplo: %s data/entrada/entrada.txt data/saida\n", argv[0]);
         }
         MPI_Finalize();
         return 1;
     }
+    const char *dir_saida = (argc >= 3) ? argv[2] : ".";
 
     Configuracao cfg;
-    if (le_configuracao(argv[1], &cfg) != 0) {
-        fprintf(stderr,
-            "[processo %d] Erro ao ler o arquivo de entrada '%s'. "
-            "Verifique se o arquivo existe e segue o formato esperado.\n",
-            rank, argv[1]);
+    memset(&cfg, 0, sizeof(cfg));
+    int leitura_ok = 1;
+    if (rank == 0) {
+        leitura_ok = (le_configuracao(argv[1], &cfg) == 0);
+    }
+    MPI_Bcast(&leitura_ok, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    if (!leitura_ok) {
+        if (rank == 0) {
+            fprintf(stderr,
+                "[processo 0] Erro ao ler o arquivo de entrada '%s'. "
+                "Verifique se o arquivo existe e segue o formato esperado.\n",
+                argv[1]);
+        }
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
+
+    distribui_configuracao(&cfg, rank);
 
     if (!verifica_estabilidade(&cfg)) {
         if (rank == 0) {
@@ -181,7 +274,6 @@ int main(int argc, char **argv) {
 
     int linha_global_inicial = rank * linhas_locais;
 
-    // Inicialização da faixa deste processo
     for (int i = 0; i < linhas_locais + 2; i++) {
         int linha_global = linha_global_inicial + (i - 1);
         for (int j = 0; j < cfg.n_colunas; j++) {
@@ -202,6 +294,18 @@ int main(int argc, char **argv) {
 
     double dx2 = cfg.dx * cfg.dx;
     double dy2 = cfg.dy * cfg.dy;
+
+    double *grade_completa = NULL;
+    if (rank == 0) {
+        grade_completa = malloc((size_t)cfg.n_linhas * cfg.n_colunas * sizeof(double));
+    }
+    int tamanho_fatia = linhas_locais * cfg.n_colunas;
+
+    MPI_Gather(atual[1], tamanho_fatia, MPI_DOUBLE,
+               grade_completa, tamanho_fatia, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    if (rank == 0) {
+        escreve_saida_global(&cfg, grade_completa, 0, dir_saida);
+    }
 
     double inicio = MPI_Wtime();
 
@@ -236,6 +340,18 @@ int main(int argc, char **argv) {
         double **tmp = atual;
         atual = proxima;
         proxima = tmp;
+
+        int passo_atual = passo + 1;
+        int eh_intervalo = (cfg.intervalo_salvamento > 0) &&
+                            (passo_atual % cfg.intervalo_salvamento == 0);
+        int eh_ultimo = (passo_atual == cfg.n_passos);
+        if (eh_intervalo || eh_ultimo) {
+            MPI_Gather(atual[1], tamanho_fatia, MPI_DOUBLE,
+                       grade_completa, tamanho_fatia, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+            if (rank == 0) {
+                escreve_saida_global(&cfg, grade_completa, passo_atual, dir_saida);
+            }
+        }
     }
 
     double fim = MPI_Wtime();
@@ -253,9 +369,13 @@ int main(int argc, char **argv) {
         media_global /= n_processos;
         printf("Simulacao concluida: %d passos, %d processos MPI, grade %dx%d\n",
                cfg.n_passos, n_processos, cfg.n_linhas, cfg.n_colunas);
-        printf("Configuracao lida de: %s (%d fontes de calor)\n", argv[1], cfg.n_fontes);
+        printf("Configuracao lida de: %s (%d fontes de calor), apenas pelo rank 0\n",
+               argv[1], cfg.n_fontes);
+        printf("Saida (unica, via MPI_Gather) escrita em: %s (a cada %d passos)\n",
+               dir_saida, cfg.intervalo_salvamento);
         printf("Temperatura media final (global, aproximada): %.4f\n", media_global);
         printf("Tempo de execucao: %.4f segundos\n", fim - inicio);
+        free(grade_completa);
     }
 
     free(cfg.fontes);
