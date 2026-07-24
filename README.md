@@ -1,5 +1,7 @@
 # Simulação de Difusão de Calor 2D com MPI + OpenMP
 
+Integrantes: João Vitor Fonseca Ceppo e Henrique Colares Versiani
+
 Trabalho da disciplina de Introdução ao Processamento Paralelo e Distribuído (IPPD).
 
 ## Problema
@@ -153,5 +155,3 @@ Testes comparando execução sequencial e paralela (variando número de
 processos MPI e threads OpenMP, em duas grades de tamanhos diferentes)
 estão documentados em [`docs/analise_desempenho.md`](docs/analise_desempenho.md),
 com os prints de cada execução em `docs/imagens/`.
-
-Integrantes: João Vitor Fonseca Ceppo e Henrique Colares Versiani
