@@ -55,7 +55,7 @@ temperatura for negativa).
 
 O ambiente de execução (Xivoco) fornece múltiplos nós de cluster que não
 compartilham disco entre si. O programa contorna essa limitação nas duas
-pontas:
+pontas de dados:
 
 - **Entrada**: apenas o processo de rank 0 lê o arquivo de configuração do
   seu próprio disco; os demais processos recebem essa configuração via
@@ -67,6 +67,11 @@ pontas:
 Na prática, isso significa que o arquivo de entrada e a pasta de saída só
 precisam existir no nó onde o rank 0 é executado (tipicamente o `master`).
 
+Isso não cobre o executável em si: o MPI não transmite o binário pela
+rede, então cada nó precisa ter sua própria cópia do programa compilado
+antes de rodar. O script `scripts/distribui_binario.sh` automatiza essa
+cópia para os demais nós via `scp`.
+
 ## Estrutura do repositório
 
 ```
@@ -75,7 +80,7 @@ projeto/
 ├── data/
 │   ├── entrada/    # arquivos de configuração da simulação
 │   └── saida/      # arquivos gerados pela simulação (grade completa, por passo salvo)
-├── scripts/        # scripts auxiliares (ex: visualização dos resultados)
+├── scripts/        # scripts auxiliares (distribuição do binário, visualização dos resultados)
 └── docs/           # relatório, resultados, análise de desempenho
 ```
 
@@ -85,12 +90,18 @@ Requer um compilador C com suporte a MPI e OpenMP.
 Esse ambiente foi fornecido no projeto Xivoco e as execuções desse trabalho
 serão feitas nele.
 
-Compilar:
+**1. Compilar:**
 ```bash
 mpicc -fopenmp src/difusao_calor.c -o src/difusao_calor -lm
 ```
 
-Executar:
+**2. Distribuir o binário para os demais nós do cluster:**
+```bash
+chmod +x scripts/distribui_binario.sh
+./scripts/distribui_binario.sh
+```
+
+**3. Executar:**
 ```bash
 OMP_NUM_THREADS=2 mpirun -np 4 --host master,worker-1,worker-2,worker-3 \
     ./src/difusao_calor data/entrada/entrada.txt data/saida
