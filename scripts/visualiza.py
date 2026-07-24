@@ -99,8 +99,8 @@ def main():
         description="Gera mapas de calor (PNG) e um GIF a partir das saidas da simulacao.")
     parser.add_argument("--entrada", default="data/saida", type=Path,
                         help="pasta com os arquivos saida_passo*.txt (padrao: data/saida)")
-    parser.add_argument("--saida", default="docs/imagens", type=Path,
-                        help="pasta onde salvar as imagens (padrao: docs/imagens)")
+    parser.add_argument("--saida", default="docs/Gif_passos", type=Path,
+                        help="pasta onde salvar as imagens (padrao: docs/Gif_passos)")
     parser.add_argument("--cmap", default="inferno",
                         help="mapa de cores do matplotlib (padrao: inferno)")
     parser.add_argument("--dpi", default=110, type=int,
