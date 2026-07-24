@@ -4,10 +4,6 @@
 src/difusao_calor
 src/*.exe
 
-# Saídas geradas pela simulação (não versionar resultados de execução)
-data/saida/*
-!data/saida/.gitkeep
-
 # Imagens geradas pelo script de visualização
 docs/imagens/*
 !docs/imagens/.gitkeep
