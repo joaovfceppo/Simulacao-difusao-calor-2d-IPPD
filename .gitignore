@@ -1,12 +1,22 @@
 # Binários compilados
 *.o
 *.out
-src/simulacao
+src/difusao_calor
 src/*.exe
 
 # Saídas geradas pela simulação (não versionar resultados de execução)
 data/saida/*
 !data/saida/.gitkeep
+
+# Imagens geradas pelo script de visualização
+docs/imagens/*
+!docs/imagens/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
 
 # Arquivos de sistema
 .DS_Store
