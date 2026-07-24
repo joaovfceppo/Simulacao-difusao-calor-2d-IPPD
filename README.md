@@ -79,9 +79,17 @@ projeto/
 ├── src/            # código-fonte em C (MPI + OpenMP)
 ├── data/
 │   ├── entrada/    # arquivos de configuração da simulação
+│   │   ├── entrada.txt   # grade pequena (100x100), usada na análise de desempenho
+│   │   └── entrada2.txt  # grade grande (1000x1000), usada na análise de desempenho
 │   └── saida/      # arquivos gerados pela simulação (grade completa, por passo salvo)
-├── scripts/        # scripts auxiliares (distribuição do binário, visualização dos resultados)
-└── docs/           # relatório, resultados, análise de desempenho
+├── scripts/
+│   ├── distribui_binario.sh  # copia o executável compilado para os demais nós do cluster
+│   ├── visualiza.py           # gera mapas de calor (PNG) e um GIF a partir da saída
+│   └── requirements.txt       # dependências Python do script de visualização
+└── docs/
+    ├── analise_desempenho.md  # comparação sequencial x paralelo, com discussão
+    ├── imagens/                # prints das execuções usadas na análise de desempenho
+    └── Gif_passos/             # PNGs por passo e animação gerados por visualiza.py
 ```
 
 ## Como compilar e executar
@@ -104,7 +112,46 @@ chmod +x scripts/distribui_binario.sh
 **3. Executar:**
 ```bash
 OMP_NUM_THREADS=2 mpirun -np 4 --host master,worker-1,worker-2,worker-3 \
-    ./src/difusao_calor data/entrada/entrada.txt data/saida
+    ./src/difusao_calor data/entrada/entrada2.txt data/saida
 ```
+
+> O exemplo usa a grade grande (`entrada2.txt`), onde a divisão do trabalho
+> entre os nós compensa o custo de comunicação. Na grade pequena
+> (`entrada.txt`), rodar com 4 processos chega a ser mais lento que a execução
+> sequencial — o cálculo por processo é pequeno demais para pagar o overhead
+> de troca de mensagens. Os detalhes dessa comparação (e de qual configuração
+> escolher para cada tamanho de grade) estão em
+> [`docs/analise_desempenho.md`](docs/analise_desempenho.md).
+
+## Visualização
+
+O script `scripts/visualiza.py` lê os arquivos `saida_passo*.txt` gerados
+pela simulação e produz um mapa de calor (PNG) para cada passo salvo, além
+de uma animação (GIF) mostrando a evolução da temperatura ao longo do
+tempo. Ele roda no computador local (não no Xivoco, que não tem interface
+gráfica), a partir de uma cópia da pasta `data/saida`.
+
+Instalar as dependências (uma vez):
+```bash
+pip install -r scripts/requirements.txt
+```
+
+Rodar (usa `data/saida` como entrada e `docs/Gif_passos` como saída por
+padrão):
+```bash
+python scripts/visualiza.py
+```
+
+Outras opções disponíveis: `--entrada`, `--saida`, `--cmap`, `--fps`,
+`--vmin`/`--vmax` (para fixar manualmente a escala de temperatura) e
+`--sem-gif` (gera só os PNGs). Use `python scripts/visualiza.py --help`
+para a lista completa.
+
+## Análise de desempenho
+
+Testes comparando execução sequencial e paralela (variando número de
+processos MPI e threads OpenMP, em duas grades de tamanhos diferentes)
+estão documentados em [`docs/analise_desempenho.md`](docs/analise_desempenho.md),
+com os prints de cada execução em `docs/imagens/`.
 
 Integrantes: João Vitor Fonseca Ceppo e Henrique Colares Versiani
