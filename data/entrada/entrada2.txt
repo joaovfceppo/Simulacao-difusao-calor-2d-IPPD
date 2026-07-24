@@ -1,0 +1,25 @@
+# Geometria da grade: num de linhas e num de colunas
+1000 1000
+
+# Difusividade termica do material (alpha)
+0.1
+
+# Discretizacao dx dy dt
+0.01 0.01 0.0002
+
+# Simulacao: numero de passos de tempo, intervalo para salvar no arquivo (em passos)
+2000 200
+
+# Condicoes de contorno (Dirichlet), uma temperatura fixa por lado:
+# TOPO BASE ESQUERDA DIREITA
+100.0 0.0 50.0 50.0
+
+# Temperatura inicial no interior da grade
+20.0
+
+# Fontes de calor: quantidade de regioes retangulares a seguir
+2
+
+# Cada fonte, uma por linha: linha_inicio coluna_inicio linha_fim coluna_fim temperatura
+200 200 350 350 500.0
+600 650 850 850 100.0
